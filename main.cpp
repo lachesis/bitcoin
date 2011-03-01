@@ -771,6 +771,7 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
         EraseFromWallet(ptxOld->GetHash());
 
     printf("AcceptToMemoryPool(): accepted %s\n", hash.ToString().substr(0,10).c_str());
+	printf("AcceptToMemoryPool(): size %lu\n",  mapTransactions.size());
     return true;
 }
 

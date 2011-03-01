@@ -64,6 +64,11 @@ obj/nogui/%.o: %.cpp $(HEADERS)
 bitcoind: $(OBJS:obj/%=obj/nogui/%) obj/sha256.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LIBS)
 
+install:
+	-strip bitcoin
+	-strip bitcoind
+	-mkdir /usr/local/bin
+	-cp bitcoin bitcoind /usr/local/bin
 
 clean:
 	-rm -f obj/*.o
