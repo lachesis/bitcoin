@@ -1185,9 +1185,90 @@ Value validateaddress(const Array& params, bool fHelp)
 }
 
 
+Value getmuchwork(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "getmuchwork <amount>\n"
+            "Returns array of len <amount> of formatted hash data to work on:\n"
+            "  \"midstate\" : precomputed hash state after hashing the first half of the data\n"
+            "  \"data\" : block data\n"
+            "  \"hash1\" : formatted hash buffer for second hash\n"
+            "  \"target\" : little endian hash target");
+
+    if (vNodes.empty())
+        throw JSONRPCError(-9, "Bitcoin is not connected!");
+
+    if (IsInitialBlockDownload())
+        throw JSONRPCError(-10, "Bitcoin is downloading blocks...");
+
+    static map<uint256, pair<CBlock*, unsigned int> > mapNewBlock;
+    static vector<CBlock*> vNewBlock;
+    static CReserveKey reservekey;
+
+    Array ret;
+    for(int i=0; i<params[0].get_int(); i++) {
+        // Update block
+        static unsigned int nTransactionsUpdatedLast;
+        static CBlockIndex* pindexPrev;
+        static int64 nStart;
+        static CBlock* pblock;
+        if (pindexPrev != pindexBest ||
+            (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60))
+        {
+            if (pindexPrev != pindexBest)
+            {
+                // Deallocate old blocks since they're obsolete now
+                mapNewBlock.clear();
+                foreach(CBlock* pblock, vNewBlock)
+                    delete pblock;
+                vNewBlock.clear();
+            }
+            nTransactionsUpdatedLast = nTransactionsUpdated;
+            pindexPrev = pindexBest;
+            nStart = GetTime();
+
+            // Create new block
+            pblock = CreateNewBlock(reservekey);
+            if (!pblock)
+                throw JSONRPCError(-7, "Out of memory");
+            vNewBlock.push_back(pblock);
+        }
+
+        // Update nTime
+        pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+        pblock->nNonce = 0;
+
+        // Update nExtraNonce
+        static unsigned int nExtraNonce = 0;
+        static int64 nPrevTime = 0;
+        IncrementExtraNonce(pblock, pindexPrev, nExtraNonce, nPrevTime);
+
+        // Save
+        mapNewBlock[pblock->hashMerkleRoot] = make_pair(pblock, nExtraNonce);
+
+        // Prebuild hash buffers
+        char pmidstate[32];
+        char pdata[128];
+        char phash1[64];
+        FormatHashBuffers(pblock, pmidstate, pdata, phash1);
+
+        uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
+
+        Object result;
+        result.push_back(Pair("midstate", HexStr(BEGIN(pmidstate), END(pmidstate))));
+        result.push_back(Pair("data",     HexStr(BEGIN(pdata), END(pdata))));
+        result.push_back(Pair("hash1",    HexStr(BEGIN(phash1), END(phash1))));
+        result.push_back(Pair("target",   HexStr(BEGIN(hashTarget), END(hashTarget))));
+        ret.push_back(result);
+    }
+    return ret;
+}
+
+
 Value getwork(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() > 1)
+     if (fHelp || params.size() > 1)
         throw runtime_error(
             "getwork [data]\n"
             "If [data] is not specified, returns formatted hash data to work on:\n"
@@ -1298,8 +1379,6 @@ Value getwork(const Array& params, bool fHelp)
 
 
 
-
-
 //
 // Call Table
 //
@@ -1340,6 +1419,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("sendfrom",              &sendfrom),
     make_pair("gettransaction",        &gettransaction),
     make_pair("listtransactions",      &listtransactions),
+    make_pair("getmuchwork",           &getmuchwork),
     make_pair("getwork",               &getwork),
     make_pair("listaccounts",          &listaccounts),
 };
@@ -1366,6 +1446,7 @@ string pAllowInSafeMode[] =
     "getaddressesbylabel", // deprecated
     "backupwallet",
     "validateaddress",
+    "getmuchwork",
     "getwork",
 };
 set<string> setAllowInSafeMode(pAllowInSafeMode, pAllowInSafeMode + sizeof(pAllowInSafeMode)/sizeof(pAllowInSafeMode[0]));
@@ -1987,6 +2068,7 @@ int CommandLineRPC(int argc, char *argv[])
         if (strMethod == "move"                   && n > 3) ConvertTo<boost::int64_t>(params[3]);
         if (strMethod == "sendfrom"               && n > 2) ConvertTo<double>(params[2]);
         if (strMethod == "sendfrom"               && n > 3) ConvertTo<boost::int64_t>(params[3]);
+        if (strMethod == "getmuchwork"            && n > 0) ConvertTo<boost::int64_t>(params[0]);
         if (strMethod == "listtransactions"       && n > 1) ConvertTo<boost::int64_t>(params[1]);
         if (strMethod == "listaccounts"           && n > 0) ConvertTo<boost::int64_t>(params[0]);
 

@@ -735,8 +735,8 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
         }
 
         // Don't accept it if it can't get into a block
-        if (nFees < GetMinFee(1000))
-            return error("AcceptToMemoryPool() : not enough fees");
+		//        if (nFees < GetMinFee(1000))
+        //    return error("AcceptToMemoryPool() : not enough fees");
 
         // Limit free transactions per 10 minutes
         if (nFees < CENT && GetBoolArg("-limitfreerelay"))
@@ -3384,7 +3384,7 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
                 continue;
 
             // Transaction fee required depends on block size
-            bool fAllowFree = (nBlockSize + nTxSize < 4000 || dPriority > COIN * 144 / 250);
+            bool fAllowFree = (nBlockSize + nTxSize < 16000 || dPriority > COIN * 144 / 250);
             int64 nMinFee = tx.GetMinFee(nBlockSize, fAllowFree);
 
             // Connecting shouldn't fail due to dependency on other memory pool transactions
