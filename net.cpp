@@ -470,8 +470,8 @@ CNode* ConnectNode(CAddress addrConnect, int64 nTimeout)
     /// debug print
     printf("trying connection %s lastseen=%.1fhrs lasttry=%.1fhrs\n",
         addrConnect.ToStringLog().c_str(),
-        (double)(addrConnect.nTime - GetAdjustedTime())/3600.0,
-        (double)(addrConnect.nLastTry - GetAdjustedTime())/3600.0);
+        (double)(GetAdjustedTime() - addrConnect.nTime)/3600.0,
+        (double)(GetAdjustedTime() - addrConnect.nLastTry)/3600.0);
 
     CRITICAL_BLOCK(cs_mapAddresses)
         mapAddresses[addrConnect.GetKey()].nLastTry = GetAdjustedTime();

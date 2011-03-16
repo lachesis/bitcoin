@@ -142,7 +142,7 @@ int GetRandInt(int nMax)
 
 
 
-
+char lastPrint;
 inline int OutputDebugStringF(const char* pszFormat, ...)
 {
     int ret = 0;
@@ -171,11 +171,15 @@ inline int OutputDebugStringF(const char* pszFormat, ...)
         {
             //// Debug print useful for profiling
             //fprintf(fileout, " %"PRI64d" ", GetTimeMillis());
-            time_t t;
-			time(&t);
-			char buf[32];
-			strftime(buf,32,"%c",gmtime(&t));
-            fprintf(fileout,"%s: ", buf);
+            if(lastPrint == '\n') {
+                time_t t;
+                time(&t);
+                char buf[32];
+                strftime(buf,32,"%c",gmtime(&t));
+                fprintf(fileout,"%s: ", buf);
+            }
+            
+            lastPrint = pszFormat[strlen(pszFormat)-1];
 
             va_list arg_ptr;
             va_start(arg_ptr, pszFormat);

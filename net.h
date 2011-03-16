@@ -330,7 +330,7 @@ public:
 
     string ToStringLog() const
     {
-        return "";
+        return ToStringIPPort();
     }
 
     string ToString() const

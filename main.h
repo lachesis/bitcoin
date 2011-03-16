@@ -1160,14 +1160,16 @@ public:
         fileout << *this;
 
         // Flush stdio buffers and commit to disk before returning
-        fflush(fileout);
-        if (!IsInitialBlockDownload() || (nBestHeight+1) % 500 == 0)
-        {
+        if (!mapArgs.count("-noflush")) {
+            fflush(fileout);
+            if (!IsInitialBlockDownload() || (nBestHeight+1) % 500 == 0)
+            {
 #ifdef __WXMSW__
-            _commit(_fileno(fileout));
+                _commit(_fileno(fileout));
 #else
-            fsync(fileno(fileout));
+                fsync(fileno(fileout));
 #endif
+            }
         }
 
         return true;
