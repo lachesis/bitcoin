@@ -8,7 +8,7 @@ WXINCLUDEPATHS=$(shell wx-config --cxxflags)
 
 WXLIBS=$(shell wx-config --libs)
 
-USE_UPNP:=0
+#USE_UPNP:=0
 
 DEFS=-DNOPCH -DFOURWAYSSE2 -DUSE_SSL
 
@@ -36,7 +36,7 @@ LIBS+= \
 
 
 DEBUGFLAGS=-g -D__WXDEBUG__
-CXXFLAGS=-O2 -Wno-invalid-offsetof -Wformat $(DEBUGFLAGS) $(DEFS)
+CXXFLAGS=-O2 -Wno-invalid-offsetof -pthread -Wformat $(DEBUGFLAGS) $(DEFS)
 HEADERS=headers.h strlcpy.h serialize.h uint256.h util.h key.h bignum.h base58.h \
     script.h db.h net.h irc.h main.h rpc.h uibase.h ui.h noui.h init.h
 

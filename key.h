@@ -26,6 +26,48 @@
 // see www.keylength.com
 // script supports up to 75 for single byte push
 
+/* code copied/modified from openssl source code:
+ *    This product includes software developed by the OpenSSL Project
+ *    for use in the OpenSSL Toolkit (http://www.openssl.org/)
+ */
+int static inline EC_KEY_regenerate_key(EC_KEY *eckey, BIGNUM *priv_key)
+{
+    int ok = 0;
+    BN_CTX *ctx = NULL;
+    BIGNUM *order = NULL;
+    EC_POINT *pub_key = NULL;
+
+    if (!eckey) return 0;
+
+    const EC_GROUP *group = EC_KEY_get0_group(eckey);
+
+    if ((order = BN_new()) == NULL) goto err;
+    if ((ctx = BN_CTX_new()) == NULL) goto err;
+
+    if (!EC_GROUP_get_order(group, order, ctx)) goto err;
+
+    pub_key = EC_POINT_new(group);
+
+    if (pub_key == NULL) goto err;
+
+    if (!EC_POINT_mul(group, pub_key, priv_key, NULL, NULL, ctx)) goto err;
+
+    EC_KEY_set_private_key(eckey,priv_key);
+    EC_KEY_set_public_key(eckey,pub_key);
+
+    ok=1;
+
+err:
+
+    if (order)
+        BN_free(order);
+    if (pub_key)
+        EC_POINT_free(pub_key);
+    if (ctx != NULL)
+        BN_CTX_free(ctx);
+
+    return(ok);
+}
 
 
 class key_error : public std::runtime_error
@@ -95,6 +137,34 @@ public:
             return false;
         fSet = true;
         return true;
+    }
+
+    bool SetPrivKeyInner(const uint256& vchPrivKey)
+    {
+        EC_KEY_free(pkey);
+        pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+        if (pkey == NULL)
+            throw key_error("CKey::SetPrivKeyInner() : EC_KEY_new_by_curve_name failed");
+        BIGNUM *bn = BN_bin2bn((unsigned char *)BEGIN(vchPrivKey),32,BN_new());
+        if (bn == NULL) 
+            throw key_error("CKey::SetPrivKeyInner() : BN_bin2bn failed");
+        if (!EC_KEY_regenerate_key(pkey,bn))
+            throw key_error("CKey::SetPrivKeyInner() : EC_KEY_regenerate_key failed");
+        BN_free(bn);
+        fSet = true;
+        return true;
+    }
+
+    uint256 GetPrivKeyInner()
+    {
+        uint256 ret;
+        const BIGNUM *bn = EC_KEY_get0_private_key(pkey);
+        if (bn == NULL)
+            throw key_error("CKey::GetPrivKeyInner() : EC_KEY_get0_private_key failed");
+        int n=BN_bn2bin(bn,(unsigned char *)BEGIN(ret));
+        if (n != 32) 
+            throw key_error("CKEy::GetPrivKeyInner(): BN_bn2bin failed");
+        return ret;
     }
 
     CPrivKey GetPrivKey() const

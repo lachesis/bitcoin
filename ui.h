@@ -18,6 +18,7 @@ void CalledSetStatusBar(const string& strText, int nField);
 void MainFrameRepaint();
 void CreateMainWindow();
 void SetStartOnSystemStartup(bool fAutoStart);
+void MainWindowRefresh();
 
 
 

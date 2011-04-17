@@ -1133,7 +1133,7 @@ Value listtransactions(const Array& params, bool fHelp)
     
     // Make sure we return only last nCount items (sends-to-self might give us an extra):
     if (ret.size() > nCount)
-    {
+     {
         Array::iterator last = ret.begin();
         std::advance(last, nCount);
         ret.erase(last, ret.end());
@@ -1360,6 +1360,67 @@ Value getmuchwork(const Array& params, bool fHelp)
     return ret;
 }
 
+Value importprivkey(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "importprivkey <bitcoinprivkey>\n"
+            "Adds a private key (as returned by dumpprivkey) to your wallet.");
+
+    string secret = params[0].get_str();
+    uint256 privKey;
+    bool good = SecretToPrivKey(secret,privKey);
+
+    if (!good) throw JSONRPCError(-5,"Invalid private key");
+
+    CKey key;
+    key.SetPrivKeyInner(privKey);
+    vector<unsigned char> pubKey=key.GetPubKey();
+    string strAddress=PubKeyToAddress(pubKey);
+    string strAccount="imported";
+    SetAddressBookName(strAddress, strAccount);
+
+    if (!AddKey(key))
+        throw JSONRPCError(-4,"Error adding key to wallet");
+
+    ScanForWalletTransactions(pindexGenesisBlock);
+
+#ifdef GUI
+    MainWindowRefresh();
+#endif
+
+    return Value::null;
+}
+
+Value dumpprivkey(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "dumpprivkey <bitcoinaddress>\n"
+            "Reveals the private key corresponding to <bitcoinaddress>.");
+
+    string addr = params[0].get_str();
+    uint160 address;
+    bool good = AddressToHash160(addr,address);
+
+    if (!good) throw JSONRPCError(-5, "Invalid bitcoin address");
+
+    if (mapPubKeys.count(address)) {
+        vector<unsigned char> &pubKey = mapPubKeys[address];
+        if (mapKeys.count(pubKey)) {
+        CPrivKey &cp = mapKeys[pubKey];
+            CKey key;
+            key.SetPrivKey(cp);
+            uint256 privKey = key.GetPrivKeyInner();
+            string secret = PrivKeyToSecret(privKey);
+            return secret;
+        } else {
+            throw JSONRPCError(-4,"Private key for address " + addr + " is not known");
+        }
+    } else {
+        throw JSONRPCError(-4,"Address " + addr + " is not known");
+    }
+}
 
 Value getwork(const Array& params, bool fHelp)
 {
@@ -1518,6 +1579,8 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getmuchwork",           &getmuchwork),
     make_pair("getwork",               &getwork),
     make_pair("listaccounts",          &listaccounts),
+    make_pair("importprivkey",         &importprivkey),
+    make_pair("dumpprivkey",           &dumpprivkey),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 

@@ -2742,6 +2742,13 @@ void CreateMainWindow()
     CreateThread(ThreadDelayedRepaint, NULL);
 }
 
+void MainWindowRefresh()
+{
+    if (pframeMain != NULL)
+    {
+        pframeMain->RefreshListCtrl();
+    }
+}
 
 // Define a new application
 class CMyApp : public wxApp
