@@ -19,6 +19,7 @@ bool fCommandLine = false;
 string strMiscWarning;
 bool fTestNet = false;
 bool fNoListen = false;
+bool fLogTimestamps = false;
 
 
 
@@ -170,21 +171,16 @@ inline int OutputDebugStringF(const char* pszFormat, ...)
         }
         if (fileout)
         {
-            //// Debug print useful for profiling
-            //fprintf(fileout, " %"PRI64d" ", GetTimeMillis());
-            if(lastPrint == '\n') {
-                time_t t;
-                time(&t);
-                char buf[32];
-                strftime(buf,32,"%c",gmtime(&t));
-                fprintf(fileout,"%s: ", buf);
-            }
-            
-            lastPrint = pszFormat[strlen(pszFormat)-1];
+            static bool fStartedNewLine = true;
 
-//             // Debug print useful for profiling
-//             if (GetBoolArg("-logtimestamps"))
-//                 fprintf(fileout, "%s ", DateTimeStrFormat("%x %H:%M:%S", GetTime()).c_str());
+            // Debug print useful for profiling
+            if (fLogTimestamps && fStartedNewLine)
+                fprintf(fileout, "%s ", DateTimeStrFormat("%x %H:%M:%S", GetTime()).c_str());
+            if (pszFormat[strlen(pszFormat) - 1] == '\n')
+                fStartedNewLine = true;
+            else
+                fStartedNewLine = false;
+
             va_list arg_ptr;
             va_start(arg_ptr, pszFormat);
             ret = vfprintf(fileout, pszFormat, arg_ptr);
@@ -751,6 +747,25 @@ void ReadConfigFile(map<string, string>& mapSettingsRet,
     }
 }
 
+string GetPidFile()
+{
+    namespace fs = boost::filesystem;
+    fs::path pathConfig(GetArg("-pid", "bitcoind.pid"));
+    if (!pathConfig.is_complete())
+        pathConfig = fs::path(GetDataDir()) / pathConfig;
+    return pathConfig.string();
+}
+
+void CreatePidFile(string pidFile, pid_t pid)
+{
+    FILE* file;
+    if (file = fopen(pidFile.c_str(), "w"))
+    {
+        fprintf(file, "%d\n", pid);
+        fclose(file);
+    }
+}
+
 int GetFilesize(FILE* file)
 {
     int nSavePos = ftell(file);
@@ -859,3 +874,32 @@ void AddTimeData(unsigned int ip, int64 nTime)
         printf("|  nTimeOffset = %+"PRI64d"  (%+"PRI64d" minutes)\n", nTimeOffset, nTimeOffset/60);
     }
 }
+
+
+
+
+
+
+
+
+
+string FormatVersion(int nVersion)
+{
+    if (nVersion%100 == 0)
+        return strprintf("%d.%d.%d", nVersion/1000000, (nVersion/10000)%100, (nVersion/100)%100);
+    else
+        return strprintf("%d.%d.%d.%d", nVersion/1000000, (nVersion/10000)%100, (nVersion/100)%100, nVersion%100);
+}
+
+string FormatFullVersion()
+{
+    string s = FormatVersion(VERSION) + pszSubVer;
+    if (VERSION_IS_BETA)
+        s += _("-beta");
+    return s;
+}
+
+
+
+
+

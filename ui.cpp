@@ -1665,6 +1665,10 @@ COptionsDialog::COptionsDialog(wxWindow* parent) : COptionsDialogBase(parent)
     m_checkBoxStartOnSystemStartup->SetValue(fTmpStartOnSystemStartup = GetStartOnSystemStartup());
     m_checkBoxMinimizeToTray->SetValue(fMinimizeToTray);
     m_checkBoxMinimizeOnClose->SetValue(fMinimizeOnClose);
+    if (fHaveUPnP)
+        m_checkBoxUseUPnP->SetValue(fUseUPnP);
+    else
+        m_checkBoxUseUPnP->Enable(false);
     m_checkBoxUseProxy->SetValue(fUseProxy);
     m_textCtrlProxyIP->Enable(fUseProxy);
     m_textCtrlProxyPort->Enable(fUseProxy);
@@ -1784,6 +1788,13 @@ void COptionsDialog::OnButtonApply(wxCommandEvent& event)
         walletdb.WriteSetting("fMinimizeOnClose", fMinimizeOnClose);
     }
 
+    if (fHaveUPnP && fUseUPnP != m_checkBoxUseUPnP->GetValue())
+    {
+        fUseUPnP = m_checkBoxUseUPnP->GetValue();
+        walletdb.WriteSetting("fUseUPnP", fUseUPnP);
+        MapPort(fUseUPnP);
+    }
+
     fUseProxy = m_checkBoxUseProxy->GetValue();
     walletdb.WriteSetting("fUseProxy", fUseProxy);
 
@@ -1803,7 +1814,7 @@ void COptionsDialog::OnButtonApply(wxCommandEvent& event)
 
 CAboutDialog::CAboutDialog(wxWindow* parent) : CAboutDialogBase(parent)
 {
-    m_staticTextVersion->SetLabel(strprintf(_("version %s%s BETA"), FormatVersion(VERSION).c_str(), pszSubVer));
+    m_staticTextVersion->SetLabel(strprintf(_("version %s"), FormatFullVersion().c_str()));
 
     // Change (c) into UTF-8 or ANSI copyright symbol
     wxString str = m_staticTextMain->GetLabel();
@@ -1934,20 +1945,23 @@ void CSendDialog::OnButtonSend(wxCommandEvent& event)
 
         if (fBitcoinAddress)
         {
-            // Send to bitcoin address
-            CScript scriptPubKey;
-            scriptPubKey << OP_DUP << OP_HASH160 << hash160 << OP_EQUALVERIFY << OP_CHECKSIG;
+	    CRITICAL_BLOCK(cs_main)
+	    {
+                // Send to bitcoin address
+                CScript scriptPubKey;
+                scriptPubKey << OP_DUP << OP_HASH160 << hash160 << OP_EQUALVERIFY << OP_CHECKSIG;
 
-            string strError = SendMoney(scriptPubKey, nValue, wtx, true);
-            if (strError == "")
-                wxMessageBox(_("Payment sent  "), _("Sending..."));
-            else if (strError == "ABORTED")
-                return; // leave send dialog open
-            else
-            {
-                wxMessageBox(strError + "  ", _("Sending..."));
-                EndModal(false);
-            }
+                string strError = SendMoney(scriptPubKey, nValue, wtx, true);
+                if (strError == "")
+                    wxMessageBox(_("Payment sent  "), _("Sending..."));
+                else if (strError == "ABORTED")
+                    return; // leave send dialog open
+                else
+                {
+                    wxMessageBox(strError + "  ", _("Sending..."));
+                    EndModal(false);
+                }
+	    }
         }
         else
         {
@@ -2805,6 +2819,10 @@ bool CMyApp::Initialize(int& argc, wxChar** argv)
             }
             if (pid > 0)
                 pthread_exit((void*)0);
+
+            pid_t sid = setsid();
+            if (sid < 0)
+                fprintf(stderr, "Error: setsid() returned %d errno %d\n", sid, errno);
         }
 
         return true;
