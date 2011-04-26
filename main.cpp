@@ -178,9 +178,12 @@ bool AddToWallet(const CWalletTx& wtxIn)
     return true;
 }
 
-bool AddToWalletIfMine(const CTransaction& tx, const CBlock* pblock)
+bool AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pblock, bool fUpdate = false)
 {
-    if (tx.IsMine() || mapWallet.count(tx.GetHash()))
+    uint256 hash = tx.GetHash();
+    bool fExisted = mapWallet.count(hash);
+    if (fExisted && !fUpdate) return false;
+    if (fExisted || tx.IsMine() || tx.IsFromMe())
     {
         CWalletTx wtx(tx);
         // Get merkle branch if transaction was found in a block
@@ -188,20 +191,7 @@ bool AddToWalletIfMine(const CTransaction& tx, const CBlock* pblock)
             wtx.SetMerkleBranch(pblock);
         return AddToWallet(wtx);
     }
-    return true;
-}
-
-bool AddToWalletIfFromMe(const CTransaction& tx, const CBlock* pblock)
-{
-    if (tx.IsFromMe() || mapWallet.count(tx.GetHash()))
-    {
-        CWalletTx wtx(tx);
-        // Get merkle branch if transaction was found in a block
-        if (pblock)
-            wtx.SetMerkleBranch(pblock);
-        return AddToWallet(wtx);
-    }
-    return true;
+    return false;
 }
 
 bool EraseFromWallet(uint256 hash)
@@ -912,22 +902,8 @@ int ScanForWalletTransactions(CBlockIndex* pindexStart)
             block.ReadFromDisk(pindex, true);
             foreach(CTransaction& tx, block.vtx)
             {
-                uint256 hash = tx.GetHash();
-                if (mapWallet.count(hash)) continue;
-                AddToWalletIfMine(tx, &block);
-                if (mapWallet.count(hash))
-                {
-                    ++ret;
-                    printf("Added missing RECEIVE %s\n", hash.ToString().c_str());
-                    continue;
-                }
-                AddToWalletIfFromMe(tx, &block);
-                if (mapWallet.count(hash))
-                {
-                    ++ret;
-                    printf("Added missing SEND %s\n", hash.ToString().c_str());
-                    continue;
-                }
+                if (AddToWalletIfInvolvingMe(tx, &block))
+                    ret++;
             }
             pindex = pindex->pnext;
         }
@@ -1472,10 +1448,7 @@ bool CBlock::ConnectBlock(CTxDB& txdb, CBlockIndex* pindex)
 
     // Watch for transactions paying to me
     foreach(CTransaction& tx, vtx)
-    {
-        AddToWalletIfMine(tx, this);
-        AddToWalletIfFromMe(tx, this);
-    }
+        AddToWalletIfInvolvingMe(tx, this, true);
 
     return true;
 }
@@ -1613,6 +1586,15 @@ bool CBlock::SetBestChain(CTxDB& txdb, CBlockIndex* pindexNew)
             InvalidChainFound(pindexNew);
             return error("SetBestChain() : Reorganize failed");
         }
+    }
+
+    // Update best block in wallet (so we can detect restored wallets)
+    if (!IsInitialBlockDownload())
+    {
+        CWalletDB walletdb;
+        const CBlockLocator locator(pindexNew);
+        if (!walletdb.WriteBestBlock(locator))
+            return error("SetBestChain() : WriteWalletBest failed");
     }
 
     // New best block
@@ -2709,8 +2691,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         bool fMissingInputs = false;
         if (tx.AcceptToMemoryPool(true, &fMissingInputs))
         {
-            AddToWalletIfMine(tx, NULL);
-            AddToWalletIfFromMe(tx, NULL);
+            AddToWalletIfInvolvingMe(tx, NULL, true);
             RelayMessage(inv, vMsg);
             mapAlreadyAskedFor.erase(inv);
             vWorkQueue.push_back(inv.hash);
@@ -2731,8 +2712,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                     if (tx.AcceptToMemoryPool(true))
                     {
                         printf("   accepted orphan tx %s\n", inv.hash.ToString().substr(0,10).c_str());
-                        AddToWalletIfMine(tx, NULL);
-                        AddToWalletIfFromMe(tx, NULL);
+                        AddToWalletIfInvolvingMe(tx, NULL, true);
                         RelayMessage(inv, vMsg);
                         mapAlreadyAskedFor.erase(inv);
                         vWorkQueue.push_back(inv.hash);
@@ -4088,7 +4068,7 @@ string SendMoney(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, bool fAs
     {
         string strError;
         if (nValue + nFeeRequired > GetBalance())
-            strError = strprintf(_("Error: This is an oversized transaction that requires a transaction fee of %s  "), FormatMoney(nFeeRequired).c_str());
+            strError = strprintf(_("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds  "), FormatMoney(nFeeRequired).c_str());
         else
             strError = _("Error: Transaction creation failed  ");
         printf("SendMoney() : %s", strError.c_str());
