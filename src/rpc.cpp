@@ -4,12 +4,17 @@
 
 #include "headers.h"
 #include "cryptopp/sha.h"
+#include "db.h"
+#include "net.h"
+#include "init.h"
 #undef printf
 #include <boost/asio.hpp>
 #include <boost/iostreams/concepts.hpp>
 #include <boost/iostreams/stream.hpp>
+#include <boost/algorithm/string.hpp>
 #ifdef USE_SSL
 #include <boost/asio/ssl.hpp> 
+#include <boost/filesystem/fstream.hpp>
 typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket> SSLStream;
 #endif
 #include "json/json_spirit_reader_template.h"
@@ -161,6 +166,32 @@ Value stop(const Array& params, bool fHelp)
     return "bitcoin server stopping";
 }
 
+Value resendtxn(const Array& params, bool fHelp) {
+    // Rebroadcast any of our txes that aren't in a block yet
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "resendtxn\n"
+            "Resend all wallet transactions.");
+
+    CTxDB txdb("r");
+    CRITICAL_BLOCK(cs_mapWallet)
+    {
+        // Sort them in chronological order
+        multimap<unsigned int, CWalletTx*> mapSorted;
+        BOOST_FOREACH(PAIRTYPE(const uint256, CWalletTx)& item, mapWallet)
+        {
+            CWalletTx& wtx = item.second;
+			mapSorted.insert(make_pair(wtx.nTimeReceived, &wtx));
+        }
+        BOOST_FOREACH(PAIRTYPE(const unsigned int, CWalletTx*)& item, mapSorted)
+        {
+            CWalletTx& wtx = *item.second;
+            wtx.RelayWalletTransaction(txdb);
+        }
+    }
+	return 0;
+}
+
 
 Value getblockcount(const Array& params, bool fHelp)
 {
@@ -192,6 +223,21 @@ Value getconnectioncount(const Array& params, bool fHelp)
             "Returns the number of connections to other nodes.");
 
     return (int)vNodes.size();
+}
+
+Value listconnections(const Array& params, bool fHelp) {
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "listconnections\n"
+            "Returns a list of connected nodes.");
+    
+    Object arr;
+    CRITICAL_BLOCK(cs_vNodes) {
+        BOOST_FOREACH(CNode* pnode, vNodes) {
+            arr.push_back(Pair(pnode->addr.ToStringIP(), pnode->addr.ToStringPort()));
+        }
+	}
+    return arr;    
 }
 
 
@@ -1302,7 +1348,7 @@ Value validateaddress(const Array& params, bool fHelp)
 
 Value getwork(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() > 1)
+      if (fHelp || params.size() > 1)
         throw runtime_error(
             "getwork [data]\n"
             "If [data] is not specified, returns formatted hash data to work on:\n"
@@ -1413,8 +1459,6 @@ Value getwork(const Array& params, bool fHelp)
 
 
 
-
-
 //
 // Call Table
 //
@@ -1423,9 +1467,11 @@ pair<string, rpcfn_type> pCallTable[] =
 {
     make_pair("help",                  &help),
     make_pair("stop",                  &stop),
+    make_pair("resendtxn",             &resendtxn),
     make_pair("getblockcount",         &getblockcount),
     make_pair("getblocknumber",        &getblocknumber),
     make_pair("getconnectioncount",    &getconnectioncount),
+    make_pair("listconnections",       &listconnections),
     make_pair("getdifficulty",         &getdifficulty),
     make_pair("getgenerate",           &getgenerate),
     make_pair("setgenerate",           &setgenerate),
